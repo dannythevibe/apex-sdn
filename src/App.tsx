@@ -417,14 +417,11 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => (
         transition={{ duration: 0.4, delay: 0.1 }}
         className="flex items-center gap-3"
       >
-        <button onClick={onGetStarted} className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-2">
-          Login
-        </button>
         <button
           onClick={onGetStarted}
           className="px-5 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-slate-100 transition-all"
         >
-          Register
+          Launch Dashboard
         </button>
       </motion.div>
     </nav>
@@ -501,223 +498,11 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => (
   </div>
 );
 
-const AuthPage = ({ onAuthSuccess, onBack }: { onAuthSuccess: (user: any) => void; onBack: () => void }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: ''
-  });
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    setError('');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const data = isLogin
-        ? await authApi.login({ email: formData.email, password: formData.password })
-        : await authApi.register(formData);
-
-      setAccessToken(data.accessToken);
-      onAuthSuccess(data.user);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-black flex overflow-hidden font-sans">
-      {/* Left Panel: Decorative & Steps */}
-      <div className="hidden lg:flex w-1/2 p-12 flex-col relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/40 via-black to-black -z-10" />
-        <div className="w-full h-full rounded-[40px] bg-gradient-to-tr from-purple-800 to-indigo-950 p-20 flex flex-col items-center justify-center text-center relative shadow-[0_0_100px_rgba(168,85,247,0.2)]">
-          
-          <div className="flex items-center gap-2 mb-12">
-            <div className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-white transition-all transform hover:scale-150" />
-            </div>
-            <span className="text-xl font-bold text-white tracking-tighter">Apex SDN Controller</span>
-          </div>
-
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">Get Started <br /> with Us</h2>
-          <p className="text-slate-200 text-sm opacity-80 max-w-xs mx-auto mb-16 leading-relaxed">
-            Complete these easy steps to register your secure SDN controller instance.
-          </p>
-
-          <div className="w-full max-w-sm space-y-4">
-            {[
-              { num: 1, label: "Sign up your account", active: true },
-              { num: 2, label: "Set up workspace", active: false },
-              { num: 3, label: "Set up your profile", active: false },
-            ].map((step) => (
-              <div 
-                key={step.num}
-                className={cn(
-                  "flex items-center gap-4 p-4 rounded-2xl border transition-all",
-                  step.active ? "bg-white text-black border-white" : "bg-white/5 border-white/10 text-white/40"
-                )}
-              >
-                <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold",
-                  step.active ? "bg-black text-white" : "bg-white/10 text-white"
-                )}>
-                  {step.num}
-                </div>
-                <span className="text-xs font-bold uppercase tracking-widest">{step.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel: Form */}
-      <div className="flex-1 flex flex-col p-8 md:p-20 relative bg-black">
-        {/* Back Button */}
-        <button 
-          onClick={onBack}
-          className="absolute top-8 left-8 md:top-12 md:left-20 flex items-center gap-2 text-slate-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest group"
-        >
-          <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-          Back to Home
-        </button>
-
-        <div className="max-w-md w-full mx-auto my-auto space-y-10">
-          <div className="space-y-4 text-center">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              {isLogin ? "Sign In Account" : "Sign Up Account"}
-            </h2>
-            <p className="text-sm text-slate-500">
-              {isLogin ? "Enter your core credentials to access the instance." : "Enter your personal data to create your account."}
-            </p>
-          </div>
-
-          {error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
-              <p className="text-xs text-rose-500 font-bold">{error}</p>
-            </div>
-          )}
-
-          <div className="w-full">
-             <button className="w-full flex items-center justify-center gap-3 py-3 bg-zinc-900 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-zinc-800 transition-all">
-                <Globe className="w-4 h-4" /> Continue with Google
-             </button>
-          </div>
-
-          <div className="relative text-center">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-            <span className="relative px-4 bg-black text-[10px] font-bold text-slate-700 uppercase tracking-widest">Or</span>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {!isLogin && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">First Name</label>
-                  <input 
-                    type="text" 
-                    name="firstName"
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    required
-                    placeholder="eg. John"
-                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/20 transition-all text-white placeholder:text-slate-700"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Last Name</label>
-                  <input 
-                    type="text" 
-                    name="lastName"
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    required
-                    placeholder="eg. Francisco"
-                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/20 transition-all text-white placeholder:text-slate-700"
-                  />
-                </div>
-              </div>
-            )}
-            
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Email</label>
-              <input 
-                type="email" 
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                placeholder="eg. johnfrans@gmail.com"
-                className="w-full bg-zinc-900 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/20 transition-all text-white placeholder:text-slate-700"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center px-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Password</label>
-                {isLogin && <button type="button" className="text-[10px] text-dash-accent font-bold">Forgot?</button>}
-              </div>
-              <div className="relative">
-                <input 
-                  type="password" 
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  placeholder="Enter your password"
-                  className="w-full bg-zinc-900 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/20 transition-all text-white placeholder:text-slate-700"
-                />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400">
-                  <Unlock className="w-4 h-4" />
-                </button>
-              </div>
-              {!isLogin && <p className="text-[9px] text-slate-600 px-1 italic">Must be at least 8 characters.</p>}
-            </div>
-
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 bg-white text-black font-black rounded-xl hover:bg-slate-200 transition-all shadow-xl shadow-white/5 disabled:opacity-50 flex items-center justify-center text-xs uppercase tracking-widest"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-              ) : (
-                isLogin ? "Sign In" : "Sign Up"
-              )}
-            </button>
-          </form>
-
-          <div className="text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-[10px] font-bold text-slate-500 uppercase tracking-widest"
-            >
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <span className="text-white hover:underline">{isLogin ? "Sign Up" : "Log in"}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- Main App ---
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'landing' | 'auth' | 'app'>('landing');
-  const [user, setUser] = useState<any>(null);
+  const [currentView, setCurrentView] = useState<'landing' | 'app'>('landing');
+  const [user, setUser] = useState<any>({ firstName: 'Admin', lastName: 'User', role: 'ADMIN' });
   const [stats, setStats] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -778,17 +563,7 @@ export default function App() {
       <AnimatePresence mode="wait">
         {currentView === 'landing' ? (
           <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <LandingPage onGetStarted={() => setCurrentView('auth')} />
-          </motion.div>
-        ) : currentView === 'auth' ? (
-          <motion.div key="auth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <AuthPage 
-              onAuthSuccess={(userData) => {
-                setUser(userData);
-                setCurrentView('app');
-              }} 
-              onBack={() => setCurrentView('landing')} 
-            />
+            <LandingPage onGetStarted={() => setCurrentView('app')} />
           </motion.div>
         ) : (
           <motion.div 
@@ -1283,3 +1058,4 @@ export default function App() {
     </div>
   );
 }
+
