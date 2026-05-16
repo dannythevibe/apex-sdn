@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          Role           @default(USER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  resource  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model NetworkEvent {
+  id        String    @id @default(cuid())
+  type      EventType
+  message   String?
+  severity  Severity  @default(INFO)
+  sourceIp  String?
+  destIp    String?
+  switchId  String?
+  resolved  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+}
+
+model FlowRule {
+  id        String   @id @default(cuid())
+  switchId  String
+  priority  Int
+  match     Json
+  actions   Json
+  packets   BigInt   @default(0)
+  bytes     BigInt   @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BlockedHost {
+  id          String    @id @default(cuid())
+  ipAddress   String    @unique
+  reason      String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  unblockedAt DateTime?
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum EventType {
+  DDOS_DETECTED
+  DDOS_MITIGATED
+  PORT_SCAN
+  UNAUTHORIZED_ACCESS
+  FLOW_ADDED
+  FLOW_REMOVED
+  SWITCH_CONNECTED
+  SWITCH_DISCONNECTED
+  IPS_TRIGGERED
+  INFO
+}
+
+enum Severity {
+  INFO
+  WARNING
+  CRITICAL
+}

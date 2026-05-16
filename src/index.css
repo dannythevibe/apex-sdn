@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@100;200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-dash-bg: #0d0d0d;
+  --color-dash-panel: #161616;
+  --color-dash-sidebar: #0d0d0d;
+  --color-dash-accent: #a855f7; /* Purple 500 */
+  --color-dash-accent-hover: #9333ea; /* Purple 600 */
+  --color-dash-border: #262626;
+}
+
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 10px rgba(168, 85, 247, 0.5), 0 0 20px rgba(168, 85, 247, 0.3);
+  }
+  .dot-grid {
+    background-image: radial-gradient(circle, rgba(168, 85, 247, 0.13) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-dash-bg text-slate-400 font-sans antialiased;
+  }
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  @apply bg-zinc-800 rounded-full;
+}
+
+.gradient-card {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.4) 0%, rgba(168, 85, 247, 0) 100%);
+}
+
+@keyframes terminal-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-terminal-cursor {
+  animation: terminal-cursor 1s step-end infinite;
+}
