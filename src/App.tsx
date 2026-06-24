@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { authApi, networkApi, setAccessToken, type User as ApiUser, type NetworkStats } from './lib/apiClient';
+import { simulator } from './lib/simulator';
 import { 
   Shield, 
   ShieldAlert, 
@@ -28,7 +29,9 @@ import {
   User,
   Mail,
   Key,
-  Globe
+  Globe,
+  PlayCircle,
+  StopCircle
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -41,6 +44,12 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
+
+// Import Views
+import TrafficAnalysis from './components/views/TrafficAnalysis';
+import TopologyControl from './components/views/TopologyControl';
+import LogArchive from './components/views/LogArchive';
+import SystemConfig from './components/views/SystemConfig';
 
 // --- Shared Components ---
 
@@ -510,30 +519,36 @@ export default function App() {
   const [activeSidebar, setActiveSidebar] = useState('Dashboard');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [simMode, setSimMode] = useState(false);
 
+  // ── Transform raw stats data into dashboard-ready shape ──────────────────
+  const transformStats = useCallback((data: any) => {
+    return {
+      ...data,
+      throughput: parseFloat(((data.totalBytes || 0) / (1024 * 1024)).toFixed(1)),
+      pps: data.totalPackets || 0,
+      entropy: data.live ? (data.entropy ?? 0.85) : 0,
+      cpu: data.totalFlows ? Math.min((data.totalFlows / 10) * 4, 99) : 0,
+      ram: data.totalFlows ? data.totalFlows * 5 + 160 : 160,
+      blockedIps: (data.blockedHosts || []).filter((h: any) => h.active).map((h: any) => h.ipAddress),
+      logs: (data.logs || []).map((log: any) => ({
+        ...log,
+        timestamp: new Date(log.createdAt).toLocaleTimeString(),
+        type: log.severity === 'CRITICAL' ? 'danger' : log.severity === 'WARNING' ? 'warning' : log.type === 'DDOS_MITIGATED' ? 'success' : 'info',
+        message: log.message ?? '',
+      })),
+    };
+  }, []);
+
+  // ── Real API fetch ────────────────────────────────────────────────────────
   const fetchStats = async () => {
     try {
       const data = await networkApi.stats();
-      const transformed = {
-        ...data,
-        throughput: parseFloat(((data.totalBytes || 0) / (1024 * 1024)).toFixed(1)),
-        pps: data.totalPackets || 0,
-        entropy: data.live ? 0.85 : 0,
-        cpu: data.totalFlows ? Math.min((data.totalFlows / 10) * 4, 99) : 0,
-        ram: data.totalFlows ? data.totalFlows * 5 + 160 : 160,
-        blockedIps: (data.blockedHosts || []).filter((h: any) => h.active).map((h: any) => h.ipAddress),
-        logs: (data.logs || []).map((log: any) => ({
-          ...log,
-          timestamp: new Date(log.createdAt).toLocaleTimeString(),
-          type: log.severity === 'CRITICAL' ? 'danger' : log.severity === 'WARNING' ? 'warning' : log.type === 'DDOS_MITIGATED' ? 'success' : 'info',
-          message: log.message ?? '',
-        })),
-      };
+      const transformed = transformStats(data);
       setStats(transformed);
       setHistory(prev => [...prev.slice(-19), { time: new Date().toLocaleTimeString(), ...transformed }]);
     } catch (e) {
       console.error(e);
-      // Prevent black screen — show empty dashboard on error
       setStats((prev: any) => prev ?? {
         live: false, throughput: 0, pps: 0, entropy: 0, cpu: 0, ram: 0,
         totalSwitches: 0, totalPackets: 0, totalBytes: 0, totalFlows: 0,
@@ -543,18 +558,86 @@ export default function App() {
     }
   };
 
+  // ── Simulator subscription ────────────────────────────────────────────────
   useEffect(() => {
-    if (currentView === 'app') {
-      fetchStats();
-      const interval = setInterval(fetchStats, 2000);
-      return () => clearInterval(interval);
-    }
+    if (!simMode) return;
+    const unsub = simulator.subscribe((raw) => {
+      const transformed = transformStats({
+        ...raw,
+        entropy: (() => {
+          // Derive entropy from totalFlows (attack = high, idle = low)
+          const phase = simulator.getPhase();
+          if (phase === 'attack')     return 0.31 + Math.random() * 0.65;
+          if (phase === 'mitigating') return 0.4 + Math.random() * 0.3;
+          return 0.28 + Math.random() * 0.08;
+        })(),
+      });
+      setStats(transformed);
+      setHistory(prev => [...prev.slice(-19), { time: new Date().toLocaleTimeString(), ...transformed }]);
+    });
+    simulator.start();
+    return () => {
+      unsub();
+      simulator.stop();
+    };
+  }, [simMode, transformStats]);
+
+  // ── Real API polling (when NOT in sim mode) ───────────────────────────────
+  useEffect(() => {
+    if (simMode || currentView !== 'app') return;
+    fetchStats();
+    const interval = setInterval(fetchStats, 2000);
+    return () => clearInterval(interval);
+  }, [currentView, simMode]);
+
+  // ── Auto-detect: try backend once; fall back to sim if unreachable ────────
+  useEffect(() => {
+    if (currentView !== 'app') return;
+    networkApi.stats().then(() => {
+      // Backend available — stay in real mode
+    }).catch(() => {
+      // Backend unreachable — silently activate simulation
+      setSimMode(true);
+    });
   }, [currentView]);
 
-  // Attack simulation removed — real attack state comes from Ryu IDS events
-  const toggleAttack = () => fetchStats();
+  // ── Controls ──────────────────────────────────────────────────────────────
+  const toggleAttack = () => {
+    if (simMode) {
+      const phase = simulator.getPhase();
+      if (phase === 'attack' || phase === 'mitigating') {
+        simulator.stopAttack();
+      } else {
+        simulator.triggerAttack();
+      }
+    } else {
+      fetchStats();
+    }
+  };
 
-  const toggleIPS = () => fetchStats();
+  const toggleIPS = () => {
+    if (simMode) {
+      simulator.setIPS(!stats?.ipsEnabled);
+    } else {
+      fetchStats();
+    }
+  };
+
+  const toggleSimMode = () => {
+    setSimMode(prev => {
+      const next = !prev;
+      if (!next) {
+        simulator.stop();
+        simulator.reset();
+        setStats(null);
+        setHistory([]);
+      } else {
+        setStats(null);
+        setHistory([]);
+      }
+      return next;
+    });
+  };
 
   if (!stats && currentView === 'app') return <div className="flex h-screen items-center justify-center bg-dash-bg text-slate-600 text-sm font-bold uppercase tracking-widest animate-pulse">Initializing Apex SDN Core...</div>;
 
@@ -591,12 +674,21 @@ export default function App() {
                 <SidebarItem icon={Settings} label="System Config" active={activeSidebar === 'System Config'} onClick={() => setActiveSidebar('System Config')} />
               </nav>
 
-              <div className="mt-auto px-2">
+              <div className="mt-auto px-2 space-y-3">
+                {simMode && (
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-2xl">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                      <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Simulation Mode</span>
+                    </div>
+                    <p className="text-[9px] text-purple-300/60 mt-1 pl-4">No backend required</p>
+                  </div>
+                )}
                 <div className="p-4 bg-zinc-900/50 border border-dash-border rounded-2xl">
                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Instance Status</p>
                    <div className="flex items-center gap-2">
-                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                     <span className="text-xs font-bold text-slate-300">Sync Active</span>
+                     <div className={cn("w-2 h-2 rounded-full animate-pulse", simMode ? "bg-purple-500" : "bg-emerald-500")} />
+                     <span className="text-xs font-bold text-slate-300">{simMode ? 'Simulating' : 'Sync Active'}</span>
                    </div>
                 </div>
               </div>
@@ -606,11 +698,11 @@ export default function App() {
             <main className="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scroll">
               
               {/* Top Header */}
-              <header className="h-24 flex items-center justify-between px-10 border-b border-dash-border sticky top-0 bg-dash-bg/80 backdrop-blur-xl z-40">
-                <div className="flex items-center gap-6">
+              <header className="h-28 flex items-center justify-between px-12 border-b border-dash-border sticky top-0 bg-dash-bg/80 backdrop-blur-xl z-40">
+                <div className="flex items-center gap-16">
                   <h1 className="text-2xl font-bold text-white tracking-tight">{activeSidebar}</h1>
                   {activeSidebar === 'Dashboard' && (
-                    <nav className="flex gap-6 text-sm font-semibold text-slate-500 mt-1">
+                    <nav className="flex gap-10 text-sm font-semibold text-slate-500 mt-1 ml-4">
                       {['Overview', 'Nodes', 'Security Rules'].map(tab => (
                         <span 
                           key={tab}
@@ -627,7 +719,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-8">
                   <div className="relative group hidden xl:block" onClick={(e) => e.stopPropagation()}>
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 group-focus-within:text-dash-accent transition-colors" />
                     <input 
@@ -730,19 +822,39 @@ export default function App() {
                       <div className="flex justify-between items-center bg-dash-panel border border-dash-border p-4 rounded-2xl shadow-lg">
                         <div className="flex items-center gap-4">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Real-time stats</span>
-                            <span className="text-xs text-slate-300 font-mono">Aug 28 - {new Date().toLocaleDateString()}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                              {simMode ? 'Simulation Mode' : 'Real-time stats'}
+                            </span>
+                            <span className="text-xs text-slate-300 font-mono">{new Date().toLocaleDateString()}</span>
                           </div>
                           <div className="h-8 w-[1px] bg-zinc-800" />
-                          <button
-                            onClick={fetchStats}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-dash-border rounded-lg text-[10px] font-bold text-slate-400 hover:bg-zinc-800 transition-colors"
-                          >
-                            <Filter className="w-3 h-3" /> REFRESH DATA
-                          </button>
+                          {!simMode && (
+                            <button
+                              onClick={fetchStats}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-dash-border rounded-lg text-[10px] font-bold text-slate-400 hover:bg-zinc-800 transition-colors"
+                            >
+                              <Filter className="w-3 h-3" /> REFRESH DATA
+                            </button>
+                          )}
                         </div>
 
                         <div className="flex gap-3">
+                          {/* SIMULATE toggle */}
+                          <button
+                            id="simulate-toggle-btn"
+                            onClick={toggleSimMode}
+                            className={cn(
+                              "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-extrabold transition-all border",
+                              simMode
+                                ? "bg-purple-500/20 border-purple-400/50 text-purple-300 shadow-[0_0_16px_rgba(168,85,247,0.3)]"
+                                : "bg-zinc-900 border-dash-border text-slate-500 hover:border-purple-500/40 hover:text-purple-400"
+                            )}
+                          >
+                            {simMode
+                              ? <><StopCircle className="w-3.5 h-3.5" /> STOP SIM</>
+                              : <><PlayCircle className="w-3.5 h-3.5" /> SIMULATE</>}
+                          </button>
+
                           <button 
                             onClick={toggleIPS}
                             className={cn(
@@ -760,7 +872,7 @@ export default function App() {
                             className={cn(
                               "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-extrabold transition-all border",
                               stats.isAttackActive
-                                ? "bg-white text-black border-white"
+                                ? "bg-white text-black border-white animate-pulse"
                                 : "bg-dash-accent/10 border-dash-accent/30 text-dash-accent hover:bg-dash-accent/20"
                             )}
                           >
@@ -1027,6 +1139,14 @@ export default function App() {
                         )}
                       </AnimatePresence>
                     </motion.div>
+                  ) : activeSidebar === 'Traffic Analysis' ? (
+                    <TrafficAnalysis key="traffic" stats={stats} history={history} />
+                  ) : activeSidebar === 'Topology Control' ? (
+                    <TopologyControl key="topology" />
+                  ) : activeSidebar === 'Log Archive' ? (
+                    <LogArchive key="logs" />
+                  ) : activeSidebar === 'System Config' ? (
+                    <SystemConfig key="config" />
                   ) : (
                     <motion.div
                       key="other-view"

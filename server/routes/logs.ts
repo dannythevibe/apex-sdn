@@ -49,7 +49,7 @@ router.post('/events/:id/resolve', requireAdmin, validate(resolveSchema), async 
       userId: req.user!.userId,
       action: req.body.resolved ? 'RESOLVE_EVENT' : 'UNRESOLVE_EVENT',
       resource: `event/${req.params.id}`,
-      details: {},
+      details: "{}",
     },
   });
   res.json({ event });
